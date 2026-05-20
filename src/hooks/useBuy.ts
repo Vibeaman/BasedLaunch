@@ -50,8 +50,9 @@ export const useBuy = () => {
         PROGRAM_ID
       );
 
+      // FIXED: sol_vault uses mint, not curve (matches lib-v4.rs)
       const [solVault] = PublicKey.findProgramAddressSync(
-        [Buffer.from('sol-vault'), curve.toBuffer()],
+        [Buffer.from('sol-vault'), tokenMint.toBuffer()],
         PROGRAM_ID
       );
 
