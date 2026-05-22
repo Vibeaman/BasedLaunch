@@ -1,3 +1,7 @@
+// Polyfill Buffer for Solana libraries in browser
+import { Buffer } from 'buffer';
+(window as any).Buffer = Buffer;
+
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
