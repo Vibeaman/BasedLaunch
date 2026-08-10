@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
-const PINATA_API_KEY = import.meta.env.VITE_PINATA_API_KEY;
-const PINATA_SECRET_KEY = import.meta.env.VITE_PINATA_SECRET_KEY;
+// No more client-side API keys — all uploads go through /api/upload-ipfs
 
 interface UploadResult {
   ipfsHash: string;
@@ -34,26 +33,17 @@ export function useIPFS() {
       });
       formData.append('pinataOptions', options);
 
-      const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+      const response = await fetch('/api/upload-ipfs', {
         method: 'POST',
-        headers: {
-          pinata_api_key: PINATA_API_KEY,
-          pinata_secret_api_key: PINATA_SECRET_KEY,
-        },
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error(`Pinata upload failed: ${response.statusText}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Upload failed: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const ipfsHash = data.IpfsHash;
-
-      return {
-        ipfsHash,
-        ipfsUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-      };
+      return await response.json();
     } catch (err: any) {
       console.error('IPFS upload error:', err);
       setError(err.message || 'Failed to upload to IPFS');
@@ -73,36 +63,20 @@ export function useIPFS() {
     setError(null);
 
     try {
-      const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+      const response = await fetch('/api/upload-ipfs', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          pinata_api_key: PINATA_API_KEY,
-          pinata_secret_api_key: PINATA_SECRET_KEY,
         },
-        body: JSON.stringify({
-          pinataContent: metadata,
-          pinataMetadata: {
-            name: `${metadata.symbol}-metadata`,
-            keyvalues: {
-              type: 'token-metadata',
-              platform: 'basedlaunch',
-            },
-          },
-        }),
+        body: JSON.stringify({ metadata }),
       });
 
       if (!response.ok) {
-        throw new Error(`Pinata metadata upload failed: ${response.statusText}`);
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || `Metadata upload failed: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const ipfsHash = data.IpfsHash;
-
-      return {
-        ipfsHash,
-        ipfsUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-      };
+      return await response.json();
     } catch (err: any) {
       console.error('Metadata upload error:', err);
       setError(err.message || 'Failed to upload metadata to IPFS');
