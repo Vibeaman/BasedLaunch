@@ -4,12 +4,14 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Supabase credentials not found. Database features disabled.');
+  throw new Error(
+    'Missing Supabase environment variables!\n' +
+    'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file or Vercel dashboard.\n' +
+    'The app cannot function without a database connection.'
+  );
 }
 
-export const supabase = supabaseUrl && supabaseAnonKey 
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // Types
 export interface User {
@@ -70,7 +72,6 @@ export interface TradeRecord {
 
 // User functions
 export async function getOrCreateUser(walletAddress: string): Promise<User | null> {
-  if (!supabase) return null;
   
   const { data: existing } = await supabase
     .from('users')
@@ -95,7 +96,6 @@ export async function getOrCreateUser(walletAddress: string): Promise<User | nul
 }
 
 export async function updateUserNickname(walletAddress: string, nickname: string): Promise<boolean> {
-  if (!supabase) return false;
   
   const { error } = await supabase
     .from('users')
@@ -107,7 +107,6 @@ export async function updateUserNickname(walletAddress: string, nickname: string
 
 // Token functions
 export async function getTokens(): Promise<Token[]> {
-  if (!supabase) return [];
   
   const { data, error } = await supabase
     .from('tokens')
@@ -123,7 +122,6 @@ export async function getTokens(): Promise<Token[]> {
 }
 
 export async function getTokenByMint(mintAddress: string): Promise<Token | null> {
-  if (!supabase) return null;
   
   const { data, error } = await supabase
     .from('tokens')
@@ -136,7 +134,6 @@ export async function getTokenByMint(mintAddress: string): Promise<Token | null>
 }
 
 export async function getUserTokens(walletAddress: string): Promise<Token[]> {
-  if (!supabase) return [];
   
   const { data, error } = await supabase
     .from('tokens')
@@ -149,7 +146,6 @@ export async function getUserTokens(walletAddress: string): Promise<Token[]> {
 }
 
 export async function createToken(token: Omit<Token, 'id' | 'created_at'>): Promise<Token | null> {
-  if (!supabase) return null;
   
   const { data, error } = await supabase
     .from('tokens')
@@ -169,11 +165,6 @@ export async function createToken(token: Omit<Token, 'id' | 'created_at'>): Prom
 
 // Insert new token after creation (alternative to createToken for bonding curve data)
 export async function insertToken(token: TokenRecord): Promise<boolean> {
-  if (!supabase) {
-    console.log('Supabase not configured, skipping token insert');
-    return false;
-  }
-
   const { error } = await supabase
     .from('tokens')
     .insert(token);
@@ -192,7 +183,6 @@ export async function updateTokenState(
   mint: string,
   updates: Partial<TokenRecord>
 ): Promise<boolean> {
-  if (!supabase) return false;
 
   const { error } = await supabase
     .from('tokens')
@@ -209,11 +199,6 @@ export async function updateTokenState(
 
 // Insert trade record
 export async function insertTrade(trade: TradeRecord): Promise<boolean> {
-  if (!supabase) {
-    console.log('Supabase not configured, skipping trade insert');
-    return false;
-  }
-
   const { error } = await supabase
     .from('trades')
     .insert(trade);
@@ -234,11 +219,6 @@ export async function fetchTokens(options?: {
   graduated?: boolean;
   hasVesting?: boolean;
 }): Promise<TokenRecord[]> {
-  if (!supabase) {
-    console.log('Supabase not configured');
-    return [];
-  }
-
   let query = supabase
     .from('tokens')
     .select('*');
@@ -272,7 +252,6 @@ export async function fetchTradeHistory(
   mint: string,
   limit: number = 100
 ): Promise<TradeRecord[]> {
-  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('trades')
@@ -291,7 +270,6 @@ export async function fetchTradeHistory(
 
 // Fetch tokens by creator (for Dashboard)
 export async function fetchTokensByCreator(creator: string): Promise<TokenRecord[]> {
-  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from('tokens')
