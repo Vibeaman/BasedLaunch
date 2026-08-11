@@ -9,12 +9,11 @@ import { useIPFS } from '../hooks/useIPFS';
 import { useNavigate } from 'react-router-dom';
 
 const steps = [
-  { id: 1, short: 'Basics', title: 'Step 1: Token Basics (name, ticker, image, supply)' },
+  { id: 1, short: 'Basics', title: 'Step 1: Token Basics (name, ticker, image)' },
   { id: 2, short: 'Team', title: 'Step 2: Team Wallets (optional)' },
   { id: 3, short: 'Vesting', title: 'Step 3: Vesting Schedule (optional)' },
-  { id: 4, short: 'Whitelist', title: 'Step 4: Whitelist (optional)' },
-  { id: 5, short: 'Rev Share', title: 'Step 5: Revenue Sharing (optional)' },
-  { id: 6, short: 'Review', title: 'Step 6: Review & Pay' },
+  { id: 4, short: 'Whitelist', title: 'Step 4: Whitelist Duration (optional)' },
+  { id: 5, short: 'Review', title: 'Step 5: Review & Pay' },
 ];
 
 export function Launch() {
@@ -31,12 +30,10 @@ export function Launch() {
   const [formData, setFormData] = useState({
     name: '',
     ticker: '',
-    supply: 1000000000,
     teamWallets: [{ address: '', percentage: 0 }],
     cliff: 30,
     linearUnlock: 180,
-    whitelist: '',
-    revShare: 0,
+    whitelistDays: 0,
   });
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length));
@@ -60,12 +57,6 @@ export function Launch() {
     // Calculate team allocation
     const teamPercent = formData.teamWallets.reduce((acc, w) => acc + (w.percentage || 0), 0);
     const hasVesting = teamPercent > 0 && (formData.cliff > 0 || formData.linearUnlock > 0);
-    
-    // Parse whitelist addresses
-    const whitelistAddresses = formData.whitelist
-      .split(/[,\n]/)
-      .map(addr => addr.trim())
-      .filter(addr => addr.length > 0);
     
     try {
       let metadataUri = '';
@@ -99,13 +90,12 @@ export function Launch() {
       const result = await createToken({
         name: formData.name,
         symbol: formData.ticker,
-        supply: formData.supply,
+        metadataUri: metadataUri,
+        imageUrl: imageFile ? imagePreview || '' : '',
         teamPercent: teamPercent,
         cliffDays: hasVesting ? formData.cliff : 0,
         vestingDays: hasVesting ? formData.linearUnlock : 0,
-        revSharePercent: formData.revShare,
-        whitelist: whitelistAddresses.length > 0 ? whitelistAddresses : undefined,
-        metadataUri: metadataUri, // Pass IPFS metadata URI
+        whitelistDurationDays: formData.whitelistDays,
       });
       
       if (result?.mint) {
@@ -167,23 +157,11 @@ export function Launch() {
                 )}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">
-                Total Supply: <span className="text-[#00ffd5]">{formData.supply.toLocaleString()}</span>
-              </label>
-              <input
-                type="range"
-                min="1000000"
-                max="1000000000"
-                step="1000000"
-                className="w-full accent-[#00ffd5]"
-                value={formData.supply}
-                onChange={(e) => setFormData({ ...formData, supply: parseInt(e.target.value) })}
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-2 font-mono">
-                <span>1M</span>
-                <span>1B</span>
-              </div>
+            <div className="flex items-start gap-4 p-6 bg-white/[0.02] border border-white/10">
+              <Info className="w-5 h-5 text-[#00ffd5] shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-400 leading-relaxed">
+                All tokens launch with a fixed supply of <span className="text-[#00ffd5] font-mono font-bold">1,000,000,000</span>. This is enforced by the smart contract.
+              </p>
             </div>
           </div>
         );
@@ -270,40 +248,26 @@ export function Launch() {
       case 4:
         return (
           <div className="space-y-8">
+            <div className="flex items-start gap-4 p-6 bg-white/[0.02] border border-white/10">
+              <Info className="w-5 h-5 text-[#8b5cf6] shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-400 leading-relaxed">
+                Set an early-access window. During this period, only whitelisted wallets can buy. Set to 0 to skip.
+              </p>
+            </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Whitelist Addresses (Optional)</label>
-              <p className="text-sm text-gray-500 mb-4">Paste Solana addresses separated by commas or newlines. These addresses get early access.</p>
-              <textarea
-                className="w-full h-48 bg-white/[0.02] border border-white/20 p-4 text-white focus:outline-none focus:border-[#00ffd5] font-mono text-sm resize-none rounded-none placeholder:text-white/20"
-                placeholder="Address1&#10;Address2&#10;..."
-                value={formData.whitelist}
-                onChange={(e) => setFormData({ ...formData, whitelist: e.target.value })}
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Whitelist Duration (Days)</label>
+              <p className="text-sm text-gray-500 mb-4">Number of days the whitelist period remains active after launch.</p>
+              <input
+                type="number"
+                min="0"
+                className="w-full bg-transparent border-b border-white/20 px-0 py-3 text-2xl text-white focus:outline-none focus:border-[#00ffd5] rounded-none font-mono"
+                value={formData.whitelistDays}
+                onChange={(e) => setFormData({ ...formData, whitelistDays: parseInt(e.target.value) || 0 })}
               />
             </div>
           </div>
         );
       case 5:
-        return (
-          <div className="space-y-8">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Revenue Sharing (%)</label>
-              <p className="text-sm text-gray-500 mb-8">Percentage of trading fees automatically distributed to token holders.</p>
-              <input
-                type="range"
-                min="0"
-                max="10"
-                step="0.5"
-                className="w-full accent-[#00ffd5]"
-                value={formData.revShare}
-                onChange={(e) => setFormData({ ...formData, revShare: parseFloat(e.target.value) })}
-              />
-              <div className="text-center mt-8 font-display text-6xl font-black text-[#00ffd5]">
-                {formData.revShare}%
-              </div>
-            </div>
-          </div>
-        );
-      case 6:
         return (
           <div className="space-y-8">
             <h3 className="text-3xl font-display font-black mb-6 tracking-tighter">REVIEW</h3>
@@ -314,7 +278,7 @@ export function Launch() {
               </div>
               <div className="flex justify-between border-b border-white/5 pb-6">
                 <span className="text-gray-500 uppercase tracking-widest text-xs font-bold">Supply</span>
-                <span className="font-mono text-lg">{formData.supply.toLocaleString()}</span>
+                <span className="font-mono text-lg">1,000,000,000</span>
               </div>
               <div className="flex justify-between border-b border-white/5 pb-6">
                 <span className="text-gray-500 uppercase tracking-widest text-xs font-bold">Team Allocation</span>
@@ -325,8 +289,8 @@ export function Launch() {
                 <span className="text-lg">{formData.cliff}d cliff, {formData.linearUnlock}d unlock</span>
               </div>
               <div className="flex justify-between border-b border-white/5 pb-6">
-                <span className="text-gray-500 uppercase tracking-widest text-xs font-bold">Rev Share</span>
-                <span className="font-mono text-lg">{formData.revShare}%</span>
+                <span className="text-gray-500 uppercase tracking-widest text-xs font-bold">Whitelist</span>
+                <span className="font-mono text-lg">{formData.whitelistDays > 0 ? `${formData.whitelistDays} days` : 'None'}</span>
               </div>
               <div className="flex justify-between pt-4">
                 <span className="text-gray-500 uppercase tracking-widest text-xs font-bold">Platform Fee</span>
