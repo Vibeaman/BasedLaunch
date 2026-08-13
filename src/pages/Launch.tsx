@@ -35,9 +35,41 @@ export function Launch() {
     linearUnlock: 180,
     whitelistDays: 0,
   });
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, steps.length));
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
+  const totalTeamAllocation = formData.teamWallets.reduce((acc, w) => acc + (w.percentage || 0), 0);
+
+  const validateStep = (step: number): string[] => {
+    const errors: string[] = [];
+    if (step === 1) {
+      if (!formData.name.trim()) errors.push('Token name is required.');
+      if (!formData.ticker.trim()) errors.push('Ticker is required.');
+      if (formData.ticker.length > 10) errors.push('Ticker must be 10 characters or fewer.');
+    }
+    if (step === 2) {
+      if (totalTeamAllocation > 100) errors.push('Total team allocation cannot exceed 100%.');
+      formData.teamWallets.forEach((w, i) => {
+        if (w.percentage < 0) errors.push(`Wallet ${i + 1} allocation cannot be negative.`);
+      });
+    }
+    if (step === 3) {
+      if (formData.cliff < 0) errors.push('Cliff period cannot be negative.');
+      if (formData.linearUnlock < 0) errors.push('Linear unlock duration cannot be negative.');
+    }
+    if (step === 4) {
+      if (formData.whitelistDays < 0) errors.push('Whitelist duration cannot be negative.');
+    }
+    return errors;
+  };
+
+  const nextStep = () => {
+    const errors = validateStep(currentStep);
+    setValidationErrors(errors);
+    if (errors.length === 0) {
+      setCurrentStep((prev) => Math.min(prev + 1, steps.length));
+    }
+  };
+  const prevStep = () => { setValidationErrors([]); setCurrentStep((prev) => Math.max(prev - 1, 1)); };
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -121,16 +153,18 @@ export function Launch() {
                 placeholder="e.g. Based AI"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onBlur={(e) => setFormData({ ...formData, name: e.target.value.trim() })}
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Ticker</label>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Ticker <span className="text-gray-600 normal-case tracking-normal font-normal">(max 10 chars)</span></label>
               <input
                 type="text"
+                maxLength={10}
                 className="w-full bg-transparent border-b border-white/20 px-0 py-3 text-2xl text-white focus:outline-none focus:border-[#00ffd5] transition-colors rounded-none placeholder:text-white/20"
                 placeholder="e.g. BAI"
                 value={formData.ticker}
-                onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase() })}
+                onChange={(e) => setFormData({ ...formData, ticker: e.target.value.toUpperCase().slice(0, 10) })}
               />
             </div>
             <div>
@@ -194,24 +228,34 @@ export function Launch() {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Alloc (%)</label>
                   <input
                     type="number"
+                    min={0}
+                    max={100}
                     className="w-full bg-transparent border-b border-white/20 px-0 py-2 text-lg text-white focus:outline-none focus:border-[#00ffd5] rounded-none font-mono placeholder:text-white/20"
                     placeholder="0"
                     value={wallet.percentage}
                     onChange={(e) => {
                       const newWallets = [...formData.teamWallets];
-                      newWallets[index].percentage = parseFloat(e.target.value);
+                      newWallets[index].percentage = Math.max(0, parseFloat(e.target.value) || 0);
                       setFormData({ ...formData, teamWallets: newWallets });
                     }}
                   />
                 </div>
               </div>
             ))}
-            <button
-              onClick={() => setFormData({ ...formData, teamWallets: [...formData.teamWallets, { address: '', percentage: 0 }] })}
-              className="text-sm font-bold uppercase tracking-widest text-[#00ffd5] hover:text-white transition-colors border-b border-[#00ffd5] hover:border-white pb-1"
-            >
-              + Add Wallet
-            </button>
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setFormData({ ...formData, teamWallets: [...formData.teamWallets, { address: '', percentage: 0 }] })}
+                className="text-sm font-bold uppercase tracking-widest text-[#00ffd5] hover:text-white transition-colors border-b border-[#00ffd5] hover:border-white pb-1"
+              >
+                + Add Wallet
+              </button>
+              <span className={cn(
+                "text-sm font-mono font-bold",
+                totalTeamAllocation > 100 ? "text-red-400" : "text-gray-400"
+              )}>
+                Total: {totalTeamAllocation}%{totalTeamAllocation > 100 && ' — exceeds 100%'}
+              </span>
+            </div>
           </div>
         );
       case 3:
@@ -228,9 +272,10 @@ export function Launch() {
               <p className="text-sm text-gray-500 mb-4">Time before any team tokens can be unlocked.</p>
               <input
                 type="number"
+                min={0}
                 className="w-full bg-transparent border-b border-white/20 px-0 py-3 text-2xl text-white focus:outline-none focus:border-[#00ffd5] rounded-none font-mono"
                 value={formData.cliff}
-                onChange={(e) => setFormData({ ...formData, cliff: parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, cliff: Math.max(0, parseInt(e.target.value) || 0) })}
               />
             </div>
             <div>
@@ -238,9 +283,10 @@ export function Launch() {
               <p className="text-sm text-gray-500 mb-4">Time it takes for all tokens to unlock after the cliff.</p>
               <input
                 type="number"
+                min={0}
                 className="w-full bg-transparent border-b border-white/20 px-0 py-3 text-2xl text-white focus:outline-none focus:border-[#00ffd5] rounded-none font-mono"
                 value={formData.linearUnlock}
-                onChange={(e) => setFormData({ ...formData, linearUnlock: parseInt(e.target.value) })}
+                onChange={(e) => setFormData({ ...formData, linearUnlock: Math.max(0, parseInt(e.target.value) || 0) })}
               />
             </div>
           </div>
@@ -371,6 +417,15 @@ export function Launch() {
             {renderStepContent()}
           </motion.div>
         </AnimatePresence>
+
+        {/* Validation Errors */}
+        {validationErrors.length > 0 && (
+          <div className="mt-8 bg-red-500/10 border border-red-500/20 p-4 space-y-1">
+            {validationErrors.map((err, i) => (
+              <p key={i} className="text-red-400 text-sm">{err}</p>
+            ))}
+          </div>
+        )}
 
         {/* Navigation */}
         <div className="flex justify-between mt-16 pt-8 border-t border-white/10">
