@@ -94,6 +94,20 @@ export const useBuy = () => {
         data,
       });
 
+      // Snapshot curve state BEFORE the buy to calculate tokens received later
+      let realTokensBefore = 0;
+      const curveAccountBefore = await connection.getAccountInfo(curve);
+      if (curveAccountBefore?.data) {
+        const d = curveAccountBefore.data;
+        let off = 8 + 32 + 32; // discriminator + creator + mint
+        const nLen = d.readUInt32LE(off);
+        off += 4 + nLen;
+        const sLen = d.readUInt32LE(off);
+        off += 4 + sLen;
+        off += 8 + 8 + 8; // skip virtualSol, virtualTokens, realSol
+        realTokensBefore = Number(d.readBigUInt64LE(off));
+      }
+
       const transaction = new Transaction().add(instruction);
       transaction.feePayer = wallet.publicKey;
 
@@ -140,9 +154,8 @@ export const useBuy = () => {
         const newPrice = totalTokens > 0 ? totalSol / totalTokens : 0;
         const marketCap = newPrice * 1_000_000_000;
 
-        // Estimate tokens received (rough calculation)
-        const k = (virtualSol + realSol - solAmount) * (virtualTokens - realTokens + 0);
-        const tokensReceived = realTokens; // This is cumulative, need better tracking
+        // Calculate actual tokens received by comparing curve state before and after
+        const tokensReceived = realTokens - realTokensBefore;
 
         // Insert trade to Supabase
         insertTrade({
@@ -150,7 +163,7 @@ export const useBuy = () => {
           trader: wallet.publicKey.toString(),
           trade_type: 'buy',
           sol_amount: solAmount,
-          token_amount: tokensReceived, // Approximate
+          token_amount: tokensReceived,
           price_at_trade: newPrice,
           tx_signature: signature,
         }).catch(err => console.error('Trade insert failed:', err));
