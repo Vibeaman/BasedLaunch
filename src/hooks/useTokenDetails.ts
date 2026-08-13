@@ -116,17 +116,19 @@ export function useTokenDetails() {
 
       const data = accountInfo.data;
       
-      // Minimum expected size: 8 (discriminator) + 32 + 32 + 8*5 + 1 + 8 + 1 + 1 + 8 + 8 = 139 bytes
-      if (data.length < 139) {
+      // Minimum expected size: 8 (discriminator) + 32 + 32 + 4+1 + 4+1 + 8*5 + 1 + 8 + 1 + 1 + 8 + 8 = 149 bytes
+      if (data.length < 149) {
         console.log('Curve account data too short:', data.length);
         return null;
       }
 
       let offset = 8; // Skip discriminator
 
-      // Parse BondingCurve struct according to lib-v4.rs:
-      // pub mint: Pubkey,              // 32
+      // Parse BondingCurve struct (matches IDL, Explore.tsx, and useSell.ts):
       // pub creator: Pubkey,           // 32
+      // pub mint: Pubkey,              // 32
+      // pub name: String,              // 4 + len
+      // pub symbol: String,            // 4 + len
       // pub virtual_sol: u64,          // 8
       // pub virtual_tokens: u64,       // 8
       // pub real_sol: u64,             // 8
@@ -139,13 +141,21 @@ export function useTokenDetails() {
       // pub cliff_seconds: i64,        // 8
       // pub vesting_duration: i64,     // 8
 
+      // creator (32 bytes)
+      const creator = new PublicKey(data.slice(offset, offset + 32)).toString();
+      offset += 32;
+
       // mint (32 bytes)
       const tokenMint = new PublicKey(data.slice(offset, offset + 32)).toString();
       offset += 32;
 
-      // creator (32 bytes)
-      const creator = new PublicKey(data.slice(offset, offset + 32)).toString();
-      offset += 32;
+      // name (4-byte length prefix + variable content) — skip, fetched from Metaplex
+      const nameLen = data.readUInt32LE(offset);
+      offset += 4 + nameLen;
+
+      // symbol (4-byte length prefix + variable content) — skip, fetched from Metaplex
+      const symbolLen = data.readUInt32LE(offset);
+      offset += 4 + symbolLen;
 
       // virtual_sol (u64) - in lamports, convert to SOL
       const virtualSol = Number(data.readBigUInt64LE(offset)) / 1e9;
