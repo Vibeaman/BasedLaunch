@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, ShieldCheck, ExternalLink, Activity, Clock, Loader2, ArrowLeftRight } from 'lucide-react';
+import { Copy, ShieldCheck, ExternalLink, Activity, Clock, Loader2, ArrowLeftRight, Users, TrendingUp, TrendingDown } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -9,6 +9,7 @@ import { useBuy } from '../hooks/useBuy';
 import { useSell } from '../hooks/useSell';
 import { useTokenDetails } from '../hooks/useTokenDetails';
 import { connection, PROGRAM_ID } from '../lib/anchor';
+import { fetchTradeHistory, TradeRecord } from '../lib/supabase';
 
 interface ChartDataPoint {
   supplyBought: number; // SOL paid
@@ -31,6 +32,12 @@ export function TokenDetail() {
   const [loadingTrade, setLoadingTrade] = useState(false);
   const [estimation, setEstimation] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Holders & Transactions state
+  const [holders, setHolders] = useState<{ address: string; amount: number; percent: number }[]>([]);
+  const [loadingHolders, setLoadingHolders] = useState(false);
+  const [trades, setTrades] = useState<TradeRecord[]>([]);
+  const [loadingTrades, setLoadingTrades] = useState(false);
 
   const { fetchTokenInfo } = useTokenDetails();
 
@@ -57,6 +64,49 @@ export function TokenDetail() {
 
     fetchAndSetTokenDetails();
   }, [mintAddress]); // Only re-fetch when mintAddress changes
+
+  // Fetch holders when tab activates
+  useEffect(() => {
+    if (activeTab !== 'holders' || !tokenMint || holders.length > 0) return;
+    const fetchHolders = async () => {
+      setLoadingHolders(true);
+      try {
+        const largest = await connection.getTokenLargestAccounts(tokenMint);
+        const totalRaw = largest.value.reduce((sum, a) => sum + Number(a.amount), 0);
+        const parsed = largest.value
+          .filter(a => Number(a.amount) > 0)
+          .map(a => ({
+            address: a.address.toBase58(),
+            amount: Number(a.amount) / (10 ** (a.decimals ?? 9)),
+            percent: totalRaw > 0 ? (Number(a.amount) / totalRaw) * 100 : 0,
+          }))
+          .sort((a, b) => b.amount - a.amount);
+        setHolders(parsed);
+      } catch (err) {
+        console.error('Failed to fetch holders:', err);
+      } finally {
+        setLoadingHolders(false);
+      }
+    };
+    fetchHolders();
+  }, [activeTab, mintAddress]);
+
+  // Fetch trade history when tab activates
+  useEffect(() => {
+    if (activeTab !== 'transactions' || !mintAddress || trades.length > 0) return;
+    const fetchTrades = async () => {
+      setLoadingTrades(true);
+      try {
+        const data = await fetchTradeHistory(mintAddress, 200);
+        setTrades(data.reverse()); // newest first
+      } catch (err) {
+        console.error('Failed to fetch trades:', err);
+      } finally {
+        setLoadingTrades(false);
+      }
+    };
+    fetchTrades();
+  }, [activeTab, mintAddress]);
 
   // Generate theoretical bonding curve data
   const bondingCurveData = useMemo(() => {
@@ -253,8 +303,124 @@ export function TokenDetail() {
     );
   };
 
-  const renderHolders = () => <div className="text-gray-400 text-center py-8">Holder details coming soon...</div>;
-  const renderTransactions = () => <div className="text-gray-400 text-center py-8">Transaction history coming soon...</div>;
+  const renderHolders = () => {
+    if (loadingHolders) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-[#00ffd5] mr-2" />
+          <span className="text-gray-400">Loading holders...</span>
+        </div>
+      );
+    }
+    if (holders.length === 0) {
+      return <div className="text-gray-400 text-center py-8">No holders found for this token.</div>;
+    }
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-12 text-xs text-gray-500 uppercase tracking-wider px-4 py-2">
+          <span className="col-span-1">#</span>
+          <span className="col-span-6">Address</span>
+          <span className="col-span-3 text-right">Amount</span>
+          <span className="col-span-2 text-right">Share</span>
+        </div>
+        {holders.map((h, i) => (
+          <div key={h.address} className="grid grid-cols-12 items-center glass-card px-4 py-3 rounded-xl hover:bg-white/5 transition-colors">
+            <span className="col-span-1 text-gray-500 text-sm">{i + 1}</span>
+            <div className="col-span-6 flex items-center gap-2">
+              <Users className="w-4 h-4 text-[#00ffd5] flex-shrink-0" />
+              <a
+                href={`https://solscan.io/account/${h.address}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-gray-300 hover:text-[#00ffd5] transition-colors font-mono truncate"
+              >
+                {h.address.slice(0, 6)}...{h.address.slice(-4)}
+              </a>
+            </div>
+            <span className="col-span-3 text-right text-sm text-white font-medium">
+              {h.amount >= 1_000_000
+                ? (h.amount / 1_000_000).toFixed(2) + 'M'
+                : h.amount >= 1_000
+                ? (h.amount / 1_000).toFixed(2) + 'K'
+                : h.amount.toFixed(2)}
+            </span>
+            <div className="col-span-2 text-right">
+              <span className="text-sm font-medium text-[#00ffd5]">{h.percent.toFixed(1)}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderTransactions = () => {
+    if (loadingTrades) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-[#00ffd5] mr-2" />
+          <span className="text-gray-400">Loading transactions...</span>
+        </div>
+      );
+    }
+    if (trades.length === 0) {
+      return <div className="text-gray-400 text-center py-8">No transactions recorded yet.</div>;
+    }
+    return (
+      <div className="space-y-2">
+        <div className="grid grid-cols-12 text-xs text-gray-500 uppercase tracking-wider px-4 py-2">
+          <span className="col-span-2">Type</span>
+          <span className="col-span-3">Trader</span>
+          <span className="col-span-2 text-right">SOL</span>
+          <span className="col-span-3 text-right">Tokens</span>
+          <span className="col-span-2 text-right">Tx</span>
+        </div>
+        {trades.map((t, i) => (
+          <div key={t.tx_signature + i} className="grid grid-cols-12 items-center glass-card px-4 py-3 rounded-xl hover:bg-white/5 transition-colors">
+            <div className="col-span-2 flex items-center gap-1.5">
+              {t.trade_type === 'buy' ? (
+                <TrendingUp className="w-4 h-4 text-green-400" />
+              ) : (
+                <TrendingDown className="w-4 h-4 text-red-400" />
+              )}
+              <span className={cn("text-sm font-medium capitalize", t.trade_type === 'buy' ? 'text-green-400' : 'text-red-400')}>
+                {t.trade_type}
+              </span>
+            </div>
+            <div className="col-span-3">
+              <a
+                href={`https://solscan.io/account/${t.trader}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-gray-300 hover:text-[#00ffd5] transition-colors font-mono"
+              >
+                {t.trader.slice(0, 4)}...{t.trader.slice(-4)}
+              </a>
+            </div>
+            <span className="col-span-2 text-right text-sm text-white">
+              {t.sol_amount < 0.001 ? t.sol_amount.toFixed(6) : t.sol_amount.toFixed(4)} SOL
+            </span>
+            <span className="col-span-3 text-right text-sm text-gray-300">
+              {t.token_amount >= 1_000_000
+                ? (t.token_amount / 1_000_000).toFixed(2) + 'M'
+                : t.token_amount >= 1_000
+                ? (t.token_amount / 1_000).toFixed(2) + 'K'
+                : t.token_amount.toFixed(2)}
+            </span>
+            <div className="col-span-2 text-right">
+              <a
+                href={`https://solscan.io/tx/${t.tx_signature}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#00ffd5] hover:text-[#00ffd5]/70 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 inline" />
+              </a>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   if (loadingToken) {
     return (
