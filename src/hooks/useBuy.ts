@@ -9,6 +9,7 @@ import {
 } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { insertTrade, updateTokenState } from '../lib/supabase';
+import { parseTxError } from '../utils/parseTxError';
 import { connection, PROGRAM_ID } from '../lib/anchor';
 
 // Anchor discriminator for buy
@@ -179,7 +180,7 @@ export const useBuy = () => {
       return { tx: signature };
     } catch (err: any) {
       console.error('Buy error:', err);
-      const errorMessage = err.message || 'Failed to buy tokens';
+      const errorMessage = parseTxError(err);
       setError(errorMessage);
       throw err;
     } finally {

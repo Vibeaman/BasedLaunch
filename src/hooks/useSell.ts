@@ -7,6 +7,7 @@ import {
 } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { insertTrade, updateTokenState } from '../lib/supabase';
+import { parseTxError } from '../utils/parseTxError';
 import { connection, PROGRAM_ID } from '../lib/anchor';
 
 // Anchor discriminator for sell
@@ -168,7 +169,7 @@ export const useSell = () => {
       return { tx: signature };
     } catch (err: any) {
       console.error('Sell error:', err);
-      const errorMessage = err.message || 'Failed to sell tokens';
+      const errorMessage = parseTxError(err);
       setError(errorMessage);
       throw err;
     } finally {

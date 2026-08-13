@@ -10,6 +10,7 @@ import {
 } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { insertToken } from '../lib/supabase';
+import { parseTxError } from '../utils/parseTxError';
 import { connection, PROGRAM_ID, FEE_WALLET } from '../lib/anchor';
 
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
@@ -204,7 +205,7 @@ export const useCreateToken = () => {
       };
     } catch (err: any) {
       console.error('Create token error:', err);
-      const errorMessage = err.message || 'Failed to create token';
+      const errorMessage = parseTxError(err);
       setError(errorMessage);
       throw err;
     } finally {
