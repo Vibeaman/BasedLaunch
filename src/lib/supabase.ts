@@ -1,15 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase environment variables!\n' +
-    'Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file or Vercel dashboard.\n' +
-    'The app cannot function without a database connection.'
-  );
-}
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tuqklakeligggpgznrqx.supabase.co'
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR1cWtsYWtlbGlnZ2dwZ3pucnF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MDE5MzEsImV4cCI6MjEwMjE3NzkzMX0.a5hn-lsrB3aYIOTnIXxZgyvaHadtybOQSRRRfY8kOBA'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
