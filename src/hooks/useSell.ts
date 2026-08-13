@@ -97,6 +97,9 @@ export const useSell = () => {
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
       transaction.recentBlockhash = blockhash;
 
+      // Snapshot SOL balance before the sell to calculate actual SOL received
+      const solBalanceBefore = await connection.getBalance(wallet.publicKey);
+
       const signedTx = await wallet.signTransaction(transaction);
 
       const signature = await connection.sendRawTransaction(signedTx.serialize(), {
@@ -137,8 +140,11 @@ export const useSell = () => {
         const newPrice = totalTokens > 0 ? totalSol / totalTokens : 0;
         const marketCap = newPrice * 1_000_000_000;
 
-        // Estimate SOL received
-        const solReceived = 0; // Would need to calculate from events or balance diff
+        // Calculate actual SOL received from wallet balance difference
+        const solBalanceAfter = await connection.getBalance(wallet.publicKey);
+        // Balance diff is positive when SOL is received; tx fee is already deducted
+        // so we add back an estimated fee (5000 lamports) to isolate the sell proceeds
+        const solReceived = Math.max(0, (solBalanceAfter - solBalanceBefore + 5000)) / 1e9;
 
         // Insert trade to Supabase
         insertTrade({
