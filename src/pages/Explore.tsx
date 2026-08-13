@@ -94,7 +94,7 @@ export function Explore() {
             price: `$${estimatedPrice}`,
             mc: `$${(realSol * 150).toFixed(0)}`,
             progress: Math.floor(progress),
-            image: `https://picsum.photos/seed/${mint.slice(0, 8)}/100/100`,
+            image: '',
           });
         } catch (err) {
           // Skip malformed
@@ -396,7 +396,13 @@ export function Explore() {
                     className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center px-6 py-5 bg-transparent border border-white/5 hover:border-[#00ffd5]/30 hover:bg-white/[0.02] transition-all group"
                   >
                     <div className="col-span-1 md:col-span-4 flex items-center gap-4">
-                      <img src={token.image} alt={token.name} className="w-12 h-12 rounded-full grayscale group-hover:grayscale-0 transition-all" referrerPolicy="no-referrer" />
+                      {token.image ? (
+                        <img src={token.image} alt={token.name} className="w-12 h-12 rounded-full grayscale group-hover:grayscale-0 transition-all" referrerPolicy="no-referrer" />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-lg">
+                          {token.symbol?.charAt(0) || '?'}
+                        </div>
+                      )}
                       <div>
                         <div className="flex items-center gap-2">
                           <h3 className="font-bold text-lg font-display">{token.name}</h3>
