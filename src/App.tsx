@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect, Component, ErrorInfo, ReactNode, lazy, Suspense } from 'react';
+import { Component, ErrorInfo, ReactNode, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // Error Boundary to catch render errors
@@ -63,77 +63,25 @@ function LoadingScreen() {
   );
 }
 
-// Minimal test to confirm React works
-function MinimalTest() {
-  const [count, setCount] = useState(0);
-  const [showFull, setShowFull] = useState(false);
-
-  useEffect(() => {
-    console.log('MinimalTest mounted - React is working!');
-    // Auto-show full app after 1 second if minimal works
-    const timer = setTimeout(() => setShowFull(true), 1000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!showFull) {
-    return (
-      <div style={{
-        minHeight: '100vh',
-        background: '#0a0a0f',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'white',
-        fontFamily: 'system-ui, sans-serif',
-        gap: '20px'
-      }}>
-        <h1 style={{color: '#00ffd5', fontSize: '2rem'}}>BasedLaunch</h1>
-        <p>React is working! Count: {count}</p>
-        <button 
-          onClick={() => setCount(c => c + 1)}
-          style={{
-            padding: '10px 20px',
-            background: '#00ffd5',
-            color: 'black',
-            border: 'none',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          Click me
-        </button>
-        <p style={{color: '#888', fontSize: '14px'}}>Loading full app...</p>
-      </div>
-    );
-  }
-
-  // Full app with lazy loading
-  return (
-    <Suspense fallback={<LoadingScreen />}>
-      <WalletProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<Home />} />
-              <Route path="launch" element={<Launch />} />
-              <Route path="explore" element={<Explore />} />
-              <Route path="token/:mint" element={<TokenDetail />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="docs" element={<Docs />} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
-      </WalletProvider>
-    </Suspense>
-  );
-}
-
 export default function App() {
-  console.log('App component rendering');
   return (
     <ErrorBoundary>
-      <MinimalTest />
+      <Suspense fallback={<LoadingScreen />}>
+        <WalletProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<Home />} />
+                <Route path="launch" element={<Launch />} />
+                <Route path="explore" element={<Explore />} />
+                <Route path="token/:mint" element={<TokenDetail />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="docs" element={<Docs />} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </WalletProvider>
+      </Suspense>
     </ErrorBoundary>
   );
 }
