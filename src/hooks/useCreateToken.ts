@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { 
-  Connection, 
   PublicKey, 
   Keypair, 
   SystemProgram, 
@@ -11,11 +10,9 @@ import {
 } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import { insertToken } from '../lib/supabase';
+import { connection, PROGRAM_ID, FEE_WALLET } from '../lib/anchor';
 
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
-const FEE_WALLET = new PublicKey('HpoDxdfvC6PSeupnhH1YXbuiQT4zkot3pCetQim7x5Mj');
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 
 // Anchor discriminator for create_token
 const CREATE_TOKEN_DISCRIMINATOR = Buffer.from([0x54, 0x34, 0xcc, 0xe4, 0x18, 0x8c, 0xea, 0x4b]);

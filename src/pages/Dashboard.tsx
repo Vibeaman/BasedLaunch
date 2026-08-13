@@ -4,10 +4,8 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { Settings, Coins, Send, Activity, Rocket, Plus, Copy, Check, Edit2, CheckCircle2, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Connection, PublicKey } from '@solana/web3.js';
-
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+import { PublicKey } from '@solana/web3.js';
+import { connection, PROGRAM_ID } from '../lib/anchor';
 
 interface MyToken {
   mint: string;

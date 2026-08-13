@@ -3,14 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Copy, ShieldCheck, ExternalLink, Activity, Clock, Loader2, ArrowLeftRight } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
-import { Connection, PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useBuy } from '../hooks/useBuy';
 import { useSell } from '../hooks/useSell';
 import { useTokenDetails } from '../hooks/useTokenDetails';
-
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+import { connection, PROGRAM_ID } from '../lib/anchor';
 
 interface ChartDataPoint {
   supplyBought: number; // SOL paid

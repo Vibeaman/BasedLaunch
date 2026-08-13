@@ -3,11 +3,9 @@ import { motion } from 'framer-motion';
 import { Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
 import { useDexScreener } from '../hooks/useDexScreener';
-
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+import { connection, PROGRAM_ID } from '../lib/anchor';
 
 interface BasedToken {
   mint: string;

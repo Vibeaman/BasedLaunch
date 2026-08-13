@@ -1,9 +1,8 @@
 import { useCallback } from 'react';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@solana/web3.js';
+import { connection, PROGRAM_ID } from '../lib/anchor';
 
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
 const METADATA_PROGRAM_ID = new PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
 
 export interface TokenDetails {
   mint: string;

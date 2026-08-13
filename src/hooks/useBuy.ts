@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { 
-  Connection, 
   PublicKey, 
   SystemProgram, 
   Transaction, 
@@ -10,9 +9,7 @@ import {
 } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddress } from '@solana/spl-token';
 import { insertTrade, updateTokenState } from '../lib/supabase';
-
-const PROGRAM_ID = new PublicKey('D4pVcNw2AZfZ78QDB4nNQ6WLYb49jrH4q22xVDQqTzkn');
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+import { connection, PROGRAM_ID } from '../lib/anchor';
 
 // Anchor discriminator for buy
 const BUY_DISCRIMINATOR = Buffer.from([0x66, 0x06, 0x3d, 0x12, 0x01, 0xda, 0xeb, 0xea]);
