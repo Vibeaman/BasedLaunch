@@ -129,7 +129,11 @@ export const useCreateToken = () => {
       data.writeBigInt64LE(vestingDurationSeconds, offset);
       offset += 8;
 
-      data.writeUInt8(teamPercent, offset);
+      // team_percent is a u8 on-chain, but the form sums allocations with parseFloat,
+      // so it can arrive as a fraction (e.g. 12.5). writeUInt8 throws on non-integers
+      // or values outside 0-255, which would hard-fail the launch — clamp and round.
+      const teamPercentByte = Math.min(255, Math.max(0, Math.round(teamPercent)));
+      data.writeUInt8(teamPercentByte, offset);
       offset += 1;
 
       data.writeBigInt64LE(whitelistDurationSeconds, offset);
