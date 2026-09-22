@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Copy, ShieldCheck, ExternalLink, Activity, Clock, Loader2, ArrowLeftRight, Users, TrendingUp, TrendingDown } from 'lucide-react';
+import { Copy, Check, Share2, ShieldCheck, ShieldAlert, AlertTriangle, ExternalLink, Activity, Clock, Loader2, ArrowLeftRight, Users, TrendingUp, TrendingDown } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { cn } from '@/lib/utils';
 import { PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
@@ -8,6 +8,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useBuy } from '../hooks/useBuy';
 import { useSell } from '../hooks/useSell';
 import { useTokenDetails } from '../hooks/useTokenDetails';
+import { useTokenSafety } from '../hooks/useTokenSafety';
 import { connection, PROGRAM_ID } from '../lib/anchor';
 import { fetchTradeHistory, TradeRecord } from '../lib/supabase';
 
@@ -31,6 +32,8 @@ export function TokenDetail() {
   const [loadingToken, setLoadingToken] = useState(true);
   const [loadingTrade, setLoadingTrade] = useState(false);
   const [estimation, setEstimation] = useState<string>('');
+  const [slippage, setSlippage] = useState<number>(1); // percent tolerance for trades
+  const [copiedShare, setCopiedShare] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Holders & Transactions state
@@ -40,6 +43,7 @@ export function TokenDetail() {
   const [loadingTrades, setLoadingTrades] = useState(false);
 
   const { fetchTokenInfo } = useTokenDetails();
+  const { safety, loading: loadingSafety, fetchSafety } = useTokenSafety();
 
   useEffect(() => {
     const fetchAndSetTokenDetails = async () => {
@@ -67,7 +71,7 @@ export function TokenDetail() {
 
   // Fetch holders when tab activates
   useEffect(() => {
-    if (activeTab !== 'holders' || !tokenMint || holders.length > 0) return;
+    if ((activeTab !== 'holders' && activeTab !== 'safety') || !tokenMint || holders.length > 0) return;
     const fetchHolders = async () => {
       setLoadingHolders(true);
       try {
@@ -106,6 +110,13 @@ export function TokenDetail() {
       }
     };
     fetchTrades();
+  }, [activeTab, mintAddress]);
+
+  // Fetch on-chain mint safety when the Safety tab activates
+  useEffect(() => {
+    if (activeTab !== 'safety' || !tokenMint || safety) return;
+    fetchSafety(tokenMint);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, mintAddress]);
 
   // Generate theoretical bonding curve data
@@ -179,15 +190,52 @@ export function TokenDetail() {
   const { buyToken } = useBuy();
   const { sellToken } = useSell();
 
+  // Pure constant-product (xy=k) quote, used for both the live estimate and the
+  // slippage-protected min-out. Token reserve in the curve = virtualTokens - realTokens
+  // (must stay consistent with useBuy/useSell and useTokenDetails).
+  const computeOut = (mode: 'buy' | 'sell', numericAmount: number): number => {
+    if (!tokenDetails || !numericAmount || isNaN(numericAmount) || numericAmount <= 0) return 0;
+    const { virtualSol, virtualTokens, realSol, realTokens } = tokenDetails;
+    const k = (virtualSol + realSol) * (virtualTokens - realTokens);
+    if (mode === 'buy') {
+      const newVirtualSol = virtualSol + realSol + numericAmount;
+      if (newVirtualSol <= 0) return 0;
+      const newVirtualTokens = k / newVirtualSol;
+      return Math.max(0, (virtualTokens - realTokens) - newVirtualTokens);
+    }
+    const newVirtualTokens = (virtualTokens - realTokens) + numericAmount;
+    if (newVirtualTokens <= 0) return 0;
+    const newVirtualSol = k / newVirtualTokens;
+    return Math.max(0, (virtualSol + realSol) - newVirtualSol);
+  };
+
+  const buildShareUrl = () => {
+    const base = `${window.location.origin}/token/${mintAddress}`;
+    return publicKey ? `${base}?ref=${publicKey.toBase58()}` : base;
+  };
+
+  const handleShareCopy = () => {
+    navigator.clipboard.writeText(buildShareUrl());
+    setCopiedShare(true);
+    setTimeout(() => setCopiedShare(false), 2000);
+  };
+
   const handleTrade = async () => {
     if (!connected || !publicKey || !tokenMint || !amount) return;
     setLoadingTrade(true);
     setError(null);
     try {
+      const numericAmount = parseFloat(amount);
+      const slippageFactor = Math.max(0, 1 - slippage / 100);
       if (tradeMode === 'buy') {
-        await buyToken({ tokenMint, solAmount: parseFloat(amount) });
+        // Protect against price moving against the buyer between quote and execution.
+        const expectedTokens = computeOut('buy', numericAmount);
+        const minTokensOut = Math.floor(expectedTokens * slippageFactor);
+        await buyToken({ tokenMint, solAmount: numericAmount, minTokensOut });
       } else {
-        await sellToken({ tokenMint, tokenAmount: parseFloat(amount) });
+        const expectedSol = computeOut('sell', numericAmount);
+        const minSolOut = expectedSol * slippageFactor;
+        await sellToken({ tokenMint, tokenAmount: numericAmount, minSolOut });
       }
       setAmount('');
       // Refetch token details to update prices
@@ -205,38 +253,17 @@ export function TokenDetail() {
     const value = e.target.value;
     setAmount(value);
 
-    if (!value || isNaN(parseFloat(value)) || !tokenDetails || !bondingCurveData || bondingCurveData.length === 0) {
+    const numericAmount = parseFloat(value);
+    if (!value || isNaN(numericAmount) || !tokenDetails) {
       setEstimation('');
       return;
     }
 
-    const numericAmount = parseFloat(value);
-    
-    // Use bonding curve formula: xy = k
-    // price = virtualSol / virtualTokens
-    const { virtualSol: initialVirtualSol, virtualTokens: initialVirtualTokens, realSol: currentRealSol, realTokens: currentRealTokens } = tokenDetails;
-    const k = (initialVirtualSol + currentRealSol) * (initialVirtualTokens - currentRealTokens);
-    
+    const out = computeOut(tradeMode, numericAmount);
     if (tradeMode === 'buy') {
-      // Buying: SOL in -> tokens out
-      const newVirtualSol = initialVirtualSol + currentRealSol + numericAmount; // Total SOL if this amount was paid
-      if (newVirtualSol <= 0) {
-        setEstimation('0.00');
-        return;
-      }
-      const newVirtualTokens = k / newVirtualSol;
-      const tokensOut = (initialVirtualTokens - currentRealTokens) - newVirtualTokens;
-      setEstimation(tokensOut.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+      setEstimation(out.toLocaleString(undefined, { maximumFractionDigits: 2 }));
     } else {
-      // Selling: tokens in -> SOL out
-      const newVirtualTokens = initialVirtualTokens - currentRealTokens + numericAmount; // Total tokens if this amount was sold
-      if (newVirtualTokens <= 0) {
-        setEstimation('0.00');
-        return;
-      }
-      const newVirtualSol = k / newVirtualTokens;
-      const solOut = (initialVirtualSol + currentRealSol) - newVirtualSol;
-      setEstimation(solOut.toFixed(6));
+      setEstimation(out.toFixed(6));
     }
   };
 
@@ -422,6 +449,102 @@ export function TokenDetail() {
     );
   };
 
+  const renderSafety = () => {
+    if (loadingSafety) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-[#00ffd5] mr-2" />
+          <span className="text-gray-400">Checking on-chain safety...</span>
+        </div>
+      );
+    }
+    if (!safety) {
+      return <div className="text-gray-400 text-center py-8">Could not read the mint account.</div>;
+    }
+
+    const topHolderPct = holders[0]?.percent ?? null;
+    const top10Pct = holders.slice(0, 10).reduce((s, h) => s + h.percent, 0);
+
+    type Status = boolean | 'neutral';
+    const rows: { label: string; ok: Status; value: string; hint: string }[] = [
+      {
+        label: 'Mint authority',
+        ok: safety.mintAuthorityRenounced ? true : safety.mintAuthorityIsCurve ? 'neutral' : false,
+        value: safety.mintAuthorityRenounced
+          ? 'Renounced'
+          : safety.mintAuthorityIsCurve
+          ? 'Bonding curve (expected)'
+          : 'Held by external wallet',
+        hint: safety.mintAuthorityRenounced
+          ? 'No new tokens can ever be minted.'
+          : safety.mintAuthorityIsCurve
+          ? 'The BasedLaunch program mints tokens as they are bought on the curve — expected while the token is active.'
+          : 'An external wallet can mint more supply. Treat with caution.',
+      },
+      {
+        label: 'Freeze authority',
+        ok: safety.freezeAuthorityRenounced,
+        value: safety.freezeAuthorityRenounced ? 'Renounced' : 'Active',
+        hint: safety.freezeAuthorityRenounced
+          ? 'Holder token accounts cannot be frozen.'
+          : 'An authority can freeze holder accounts. Treat with caution.',
+      },
+    ];
+    if (topHolderPct !== null) {
+      rows.push({
+        label: 'Top holder',
+        ok: topHolderPct < 20 ? true : topHolderPct < 40 ? 'neutral' : false,
+        value: `${topHolderPct.toFixed(1)}%`,
+        hint: 'Share of supply held by the single largest account.',
+      });
+      rows.push({
+        label: 'Top 10 holders',
+        ok: top10Pct < 50 ? true : top10Pct < 80 ? 'neutral' : false,
+        value: `${top10Pct.toFixed(1)}%`,
+        hint: 'Combined share of the ten largest accounts.',
+      });
+    }
+
+    const statusIcon = (ok: Status) =>
+      ok === true ? (
+        <ShieldCheck className="w-5 h-5 text-green-400" />
+      ) : ok === 'neutral' ? (
+        <ShieldAlert className="w-5 h-5 text-yellow-400" />
+      ) : (
+        <AlertTriangle className="w-5 h-5 text-red-400" />
+      );
+
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-400">
+          Automated on-chain checks. Informational only, not financial advice — always do your own research.
+        </p>
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-start gap-4 bg-black/30 p-4 rounded-lg border border-white/5">
+            <div className="mt-0.5">{statusIcon(r.ok)}</div>
+            <div className="flex-grow">
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-medium text-white">{r.label}</span>
+                <span
+                  className={cn(
+                    'text-sm font-mono text-right',
+                    r.ok === true ? 'text-green-400' : r.ok === 'neutral' ? 'text-yellow-400' : 'text-red-400'
+                  )}
+                >
+                  {r.value}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">{r.hint}</p>
+            </div>
+          </div>
+        ))}
+        <div className="text-xs text-gray-600 pt-2">
+          Supply: {safety.supply.toLocaleString()} · Decimals: {safety.decimals}
+        </div>
+      </div>
+    );
+  };
+
   if (loadingToken) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -474,7 +597,24 @@ export function TokenDetail() {
           </div>
         </div>
         
-        <div className="flex gap-4">
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleShareCopy}
+            className="flex items-center gap-2 px-3 py-2 glass-card rounded-lg hover:bg-white/10 transition-colors text-sm"
+            title="Copy shareable link (includes your referral when connected)"
+          >
+            {copiedShare ? <Check className="w-5 h-5 text-[#00ffd5]" /> : <Share2 className="w-5 h-5" />}
+            <span className="hidden sm:inline">{copiedShare ? 'Copied' : 'Share'}</span>
+          </button>
+          <a
+            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Check out ${tokenDetails.name} ($${tokenDetails.symbol}) on BasedLaunch`)}&url=${encodeURIComponent(buildShareUrl())}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 glass-card rounded-lg hover:bg-white/10 transition-colors font-bold text-sm"
+            title="Share on X"
+          >
+            𝕏
+          </a>
           <a href={`https://solscan.io/token/${tokenDetails.mint}?cluster=devnet`} target="_blank" rel="noopener noreferrer" className="p-2 glass-card rounded-lg hover:bg-white/10 transition-colors">
             <ExternalLink className="w-5 h-5" />
           </a>
@@ -534,7 +674,7 @@ export function TokenDetail() {
           {/* Tabs */}
           <div className="glass-card rounded-2xl overflow-hidden">
             <div className="flex border-b border-white/10">
-              {['overview', 'vesting', 'holders', 'transactions'].map(tab => (
+              {['overview', 'vesting', 'holders', 'transactions', 'safety'].map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -552,6 +692,7 @@ export function TokenDetail() {
               {activeTab === 'vesting' && renderVesting()}
               {activeTab === 'holders' && renderHolders()}
               {activeTab === 'transactions' && renderTransactions()}
+              {activeTab === 'safety' && renderSafety()}
             </div>
           </div>
         </div>
@@ -631,6 +772,51 @@ export function TokenDetail() {
                     <span className="font-bold">{tradeMode === 'buy' ? tokenDetails?.symbol || 'TOKEN' : 'SOL'}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Slippage tolerance */}
+              <div>
+                <div className="flex justify-between items-center text-sm mb-2">
+                  <span className="text-gray-400">Slippage tolerance</span>
+                  <span className="text-gray-500 font-mono">{slippage}%</span>
+                </div>
+                <div className="flex gap-2">
+                  {[0.5, 1, 5].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setSlippage(s)}
+                      className={cn(
+                        'flex-1 py-2 rounded-lg text-sm font-bold border transition-colors',
+                        slippage === s
+                          ? 'bg-[#00ffd5]/10 text-[#00ffd5] border-[#00ffd5]/40'
+                          : 'bg-black/40 text-gray-400 border-white/10 hover:text-white'
+                      )}
+                    >
+                      {s}%
+                    </button>
+                  ))}
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    step={0.1}
+                    value={slippage}
+                    onChange={(e) => setSlippage(Math.min(50, Math.max(0, parseFloat(e.target.value) || 0)))}
+                    className="w-20 bg-black/40 border border-white/10 rounded-lg px-2 py-2 text-sm font-mono text-white text-center focus:outline-none focus:border-[#00ffd5]"
+                    aria-label="Custom slippage percentage"
+                  />
+                </div>
+                {estimation && !isNaN(parseFloat(estimation.replace(/,/g, ''))) && (
+                  <div className="flex justify-between text-xs text-gray-500 mt-3">
+                    <span>Min received after slippage</span>
+                    <span className="font-mono text-gray-300">
+                      {(parseFloat(estimation.replace(/,/g, '')) * (1 - slippage / 100)).toLocaleString(undefined, {
+                        maximumFractionDigits: tradeMode === 'buy' ? 2 : 6,
+                      })}{' '}
+                      {tradeMode === 'buy' ? (tokenDetails?.symbol || 'TOKEN') : 'SOL'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Error display */}

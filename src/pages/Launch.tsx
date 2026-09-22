@@ -1,11 +1,12 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, ChevronLeft, Upload, Info, Rocket, ShieldCheck, Loader2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Upload, Info, Rocket, ShieldCheck, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
 import { useCreateToken } from '../hooks/useCreateToken';
 import { useIPFS } from '../hooks/useIPFS';
+import { useGemini } from '../hooks/useGemini';
 import { useNavigate } from 'react-router-dom';
 
 const steps = [
@@ -20,6 +21,7 @@ export function Launch() {
   const { connected } = useWallet();
   const { createToken, loading, error } = useCreateToken();
   const { uploadImage, uploadMetadata, uploading: uploadingIPFS, error: ipfsError } = useIPFS();
+  const { generate, generating: generatingAI } = useGemini();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -30,6 +32,7 @@ export function Launch() {
   const [formData, setFormData] = useState({
     name: '',
     ticker: '',
+    description: '',
     teamWallets: [{ address: '', percentage: 0 }],
     cliff: 30,
     linearUnlock: 180,
@@ -71,6 +74,19 @@ export function Launch() {
   };
   const prevStep = () => { setValidationErrors([]); setCurrentStep((prev) => Math.max(prev - 1, 1)); };
 
+  const handleGenerateDescription = async () => {
+    if (!formData.name.trim()) {
+      setValidationErrors(['Enter a token name first so the AI has something to work with.']);
+      return;
+    }
+    setValidationErrors([]);
+    const prompt = `Write a punchy 2-3 sentence description for a Solana token called "${formData.name}"${formData.ticker ? ` with ticker $${formData.ticker}` : ''}. It is launching on BasedLaunch, a launchpad with bonding-curve trading and team vesting. Make it energetic and community-focused. Plain text only — no hashtags, no emojis, no quotes.`;
+    const text = await generate(prompt);
+    if (text) {
+      setFormData((prev) => ({ ...prev, description: text }));
+    }
+  };
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -92,28 +108,36 @@ export function Launch() {
     
     try {
       let metadataUri = '';
-      
+
+      const description =
+        formData.description.trim() ||
+        `${formData.name} ($${formData.ticker}) — Launched on BasedLaunch`;
+
       // Upload image to IPFS if provided
+      let imageIpfsUrl = '';
       if (imageFile) {
         setUploadStatus('Uploading image to IPFS...');
         const imageResult = await uploadImage(imageFile);
         if (!imageResult) {
           throw new Error('Failed to upload image to IPFS');
         }
-        
-        // Upload metadata JSON to IPFS
+        imageIpfsUrl = imageResult.ipfsUrl;
+      }
+
+      // Upload metadata JSON whenever we have an image or a description to preserve.
+      if (imageFile || formData.description.trim()) {
         setUploadStatus('Uploading metadata to IPFS...');
         const metadataResult = await uploadMetadata({
           name: formData.name,
           symbol: formData.ticker,
-          description: `${formData.name} ($${formData.ticker}) - Launched on BasedLaunch`,
-          image: imageResult.ipfsUrl,
+          description,
+          image: imageIpfsUrl,
         });
-        
+
         if (!metadataResult) {
           throw new Error('Failed to upload metadata to IPFS');
         }
-        
+
         metadataUri = metadataResult.ipfsUrl;
       }
       
@@ -190,6 +214,28 @@ export function Launch() {
                   </>
                 )}
               </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest">
+                  Description <span className="text-gray-600 normal-case tracking-normal font-normal">(optional)</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGenerateDescription}
+                  disabled={generatingAI}
+                  className="flex items-center gap-1.5 text-xs font-bold text-[#00ffd5] hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {generatingAI ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {generatingAI ? 'Generating...' : 'Generate with AI'}
+                </button>
+              </div>
+              <textarea
+                className="w-full bg-transparent border border-white/20 px-4 py-3 text-base text-white focus:outline-none focus:border-[#00ffd5] transition-colors rounded-none placeholder:text-white/20 resize-none h-28"
+                placeholder="What is this token about? Or let the AI draft it for you."
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
             </div>
             <div className="flex items-start gap-4 p-6 bg-white/[0.02] border border-white/10">
               <Info className="w-5 h-5 text-[#00ffd5] shrink-0 mt-0.5" />
