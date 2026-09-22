@@ -1,7 +1,7 @@
 // Vercel Serverless Function — keeps the Gemini API key server-side only.
 // Frontend calls POST /api/gemini with a JSON body: { prompt: "..." }
 
-import { GoogleGenerativeAI } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -20,10 +20,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Missing "prompt" in request body' });
     }
 
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const genModel = genAI.getGenerativeModel({ model });
-    const result = await genModel.generateContent(prompt);
-    const text = result.response.text();
+    // @google/genai (v1.x) API: instantiate with an options object and call
+    // ai.models.generateContent. The old `new GoogleGenerativeAI(key)` /
+    // getGenerativeModel() surface belongs to the deprecated @google/generative-ai
+    // package and does not exist here — using it throws "GoogleGenerativeAI is not a constructor".
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+    const result = await ai.models.generateContent({
+      model,
+      contents: prompt,
+    });
+    const text = result.text;
 
     return res.status(200).json({ text });
   } catch (err) {

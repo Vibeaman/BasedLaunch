@@ -20,6 +20,8 @@ export interface TokenDetails {
   teamPercent: number;
   cliffSeconds: number;
   vestingDuration: number;
+  cliffDays: number;
+  vestingDurationDays: number;
   imageUrl?: string;
   uri?: string;
   price?: number;
@@ -205,10 +207,19 @@ export function useTokenDetails() {
       const { name, symbol, uri, imageUrl } = await fetchMetadata(mint);
 
       // Calculate derived values
+      // Price = SOL reserve / TOKEN reserve still in the curve.
+      // Tokens still in the curve = virtualTokens - realTokens (realTokens have left
+      // the curve to buyers). This must match useBuy/useSell and the chart/estimation
+      // in TokenDetail, which all use `virtualTokens - realTokens`. Using `+` here
+      // produced a wrong (too low) price and market cap on the token page.
       const totalSol = virtualSol + realSol;
-      const totalTokens = virtualTokens + realTokens;
+      const totalTokens = virtualTokens - realTokens;
       const price = totalTokens > 0 ? totalSol / totalTokens : 0;
       const marketCap = price * 1_000_000_000; // 1B total supply
+
+      // Derived day values for the vesting UI (stored on-chain in seconds).
+      const cliffDays = Math.floor(cliffSeconds / 86400);
+      const vestingDurationDays = Math.floor(vestingDuration / 86400);
 
       // Calculate vesting progress
       const now = Math.floor(Date.now() / 1000);
@@ -240,6 +251,8 @@ export function useTokenDetails() {
         teamPercent,
         cliffSeconds,
         vestingDuration,
+        cliffDays,
+        vestingDurationDays,
         uri,
         imageUrl: imageUrl || `https://picsum.photos/seed/${tokenMint.slice(0, 8)}/120/120`,
         price,
